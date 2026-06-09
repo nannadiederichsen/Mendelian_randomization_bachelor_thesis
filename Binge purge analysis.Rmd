@@ -1,0 +1,157 @@
+---
+title: "BP clumped"
+author: "Nanna Diederichsen"
+date: "2026-04-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MendelianRandomization)
+library(ggplot2)
+library(MungeSumstats)
+library(dplyr)
+```
+
+
+```{r}
+BMI_clumped <- read_sumstats("Clumped_data/BMI_clumped_strict.clumped")
+```
+
+
+
+```{r}
+BP_original <- read_sumstats("AN2025/BingePurge.INFO6")
+```
+
+```{r}
+BMI_original <- read_sumstats("BMI/BMI2.txt")
+```
+
+```{r}
+BMI_sig <- BMI_clumped %>%
+  filter(P < 5e-10)
+```
+
+
+```{r}
+instruments <- BMI_original %>%
+  semi_join(BMI_sig, by = "SNP") %>%     
+  select(
+    SNP,A1 = Tested_Allele,BETA,SE) 
+```
+
+
+
+
+```{r}
+BP_out <- BP_original %>%
+  filter(SNP %in% instruments$SNP) %>%
+  mutate(BETA = log(OR)) %>%
+  select(SNP, A1, BETA, SE)
+```
+
+
+```{r}
+data <- merge(instruments, BP_out, by = "SNP")
+```
+
+
+```{r}
+data$BETA.y[data$A1.x != data$A1.y] <- -data$BETA.y[data$A1.x != data$A1.y]
+```
+
+
+```{r}
+mr_obj <- mr_input(
+  bx = data$BETA.x,
+  bxse = data$SE.x,
+  by = data$BETA.y,
+  byse = data$SE.y
+)
+```
+
+```{r}
+IVW <- mr_ivw(mr_obj)
+IVW
+```
+
+
+```{r}
+S_median<- mr_median(mr_obj,weighting = "simple")
+S_median
+```
+
+```{r}
+W_median <-mr_median(mr_obj,weighting = "weighted")
+W_median
+```
+
+```{r}
+mode <- mr_mbe(mr_obj, weighting = "weighted")
+mode
+```
+```{r}
+egger <- mr_egger(mr_obj)
+egger
+```
+
+```{r}
+
+s <-ggplot(data, aes(x = BETA.x, y = BETA.y)) +
+  geom_point() +
+  geom_abline(aes(slope = IVW$Estimate, intercept = 0, color = "IVW"), linewidth = 0.8) +
+  geom_abline(aes(slope = S_median$Estimate, intercept = 0, color = "Simple median"), linewidth = 0.8) +
+  geom_abline(aes(slope = W_median$Estimate, intercept = 0, color = "Weighted median"), linewidth = 0.8) +
+  geom_abline(aes(slope = mode$Estimate, intercept = 0, color = "Mode"), linewidth = 0.8) +
+   geom_abline(aes(slope = egger$Estimate, intercept = 0, color = "Egger"), linewidth = 0.8) +
+  scale_color_manual(values = c(
+    "IVW" = "red",
+    "Simple median" = "green3",
+    "Weighted median" = "dodgerblue",
+    "Mode" = "purple",
+    "Egger" = "orange2"
+  )) +
+  theme_minimal() +
+  labs(color = NULL, x = "Beta for BMI", y = "Beta for binge purge")
+ggsave("scatter_plotBingePurge.pdf", plot = s, width = 7, height = 4.5)
+```
+
+
+
+
+
+```{r}
+
+results <- data.frame(
+  Method = c("IVW (clumped)", "Simple median", "Weighted median", "Mode", "Egger"),
+  Estimate = c(-0.320, -0.344, -0.277, -0.253, -0.138),
+  CI_lower = c(-0.396, -0.434, -0.376, -0.465, -0.361),
+  CI_upper = c(-0.244, -0.253, -0.178, -0.041, 0.085) 
+)
+
+results$Method <- factor(results$Method, levels = rev(results$Method))
+
+ p <- ggplot(results, aes(x = Estimate, y = Method)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper),
+                 height = 0.2, color = "black", linewidth = 0.8) +
+  geom_point(size = 3, color = "red") +
+  labs(x = "Causal estimate (95% CI)", y = NULL,
+       title = "Causal effect of BMI on binge purge") +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 11),
+    axis.title.x = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14)
+  )
+ggsave("forest_plotbingepurge.pdf", plot = p, width = 7, height = 4.5)
+```
+
+ 
+

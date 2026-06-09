@@ -1,0 +1,80 @@
+---
+title: "AN2025"
+author: "Nanna Diederichsen"
+date: "2026-03-24"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+
+library(MungeSumstats)
+library(MendelianRandomization)
+library(dplyr)
+```
+
+
+
+
+
+
+```{r}
+AN <- read_sumstats("AN2025/AN2025.INFO6")
+```
+
+```{r}
+BMI <- read_sumstats("BMI/BMI2.txt")
+```
+
+
+```{r}
+BMI_sig <- BMI %>%
+  filter(P < 5e-10)
+
+
+
+BMI_exp <- BMI_sig[, c("SNP", "Tested_Allele", "BETA", "SE")]
+colnames(BMI_exp) <- c("SNP", "effect_allele_BMI", "beta_BMI", "se_BMI")
+```
+
+
+
+
+```{r}
+AN$BETA <- log(AN$OR)
+
+AN_out <- AN[AN$SNP %in% BMI_exp$SNP & AN$P >= 5e-8,
+             c("SNP", "A1", "BETA", "SE")]
+
+colnames(AN_out) <- c("SNP", "effect_allele_AN", "beta_AN", "se_AN")
+```
+
+```{r}
+data <- merge(BMI_exp, AN_out, by = "SNP")
+```
+
+
+
+```{r}
+data$beta_AN[data$effect_allele_BMI != data$effect_allele_AN] <- 
+  -data$beta_AN[data$effect_allele_BMI != data$effect_allele_AN]
+```
+
+
+```{r}
+mr_obj <- mr_input(
+  bx = data$beta_BMI,
+  bxse = data$se_BMI,
+  by = data$beta_AN,
+  byse = data$se_AN
+)
+
+```
+
+
+```{r}
+ mr_ivw(mr_obj)
+```
+
+
